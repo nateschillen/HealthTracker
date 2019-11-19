@@ -9,7 +9,18 @@ import IconButton from "@material-ui/core/IconButton";
 import Drawer from "@material-ui/core/Drawer";
 import MenuIcon from "@material-ui/icons/Menu";
 import { Link, Route } from "react-router-dom";
-import { auth } from "./firebase";
+import { auth, db } from "./firebase";
+import List from "@material-ui/core/List";
+import ListItem from "@material-ui/core/ListItem";
+import ListItemText from "@material-ui/core/ListItemText";
+import Radio from "@material-ui/core/Radio";
+import DissatisfiedIcon from "@material-ui/icons/SentimentDissatisfied";
+import SatisfiedIcon from "@material-ui/icons/SentimentSatisfied";
+import VeryDissatisfiedIcon from "@material-ui/icons/SentimentVeryDissatisfied";
+import VerySatisfiedIcon from "@material-ui/icons/SentimentVerySatisfied";
+import { Line } from "react-chartjs-2";
+var unirest = require("unirest");
+var moment = require("moment");
 
 export function App(props) {
   const [drawer_open, setDrawerOpen] = useState(false);
@@ -54,7 +65,7 @@ export function App(props) {
             color="inherit"
             style={{ flexGrow: 1, marginLeft: "30px" }}
           >
-            My App
+            Health Tracker
           </Typography>
           <Typography color="inherit" style={{ marginRight: "30px" }}>
             H! {user.email}
@@ -69,160 +80,233 @@ export function App(props) {
         onClose={() => {
           setDrawerOpen(false);
         }}
+      >
+        <List>
+          <ListItem
+            button
+            to="/app/"
+            component={Link}
+            onClick={() => {
+              setDrawerOpen(false);
+            }}
+          >
+            <ListItemText primary="Take Survey" />
+          </ListItem>
+          <ListItem
+            button
+            to="/app/charts/"
+            component={Link}
+            onClick={() => {
+              setDrawerOpen(false);
+            }}
+          >
+            <ListItemText primary="Chart" />
+          </ListItem>
+        </List>
+      </Drawer>
+      <Route
+        exact
+        path="/app/"
+        render={routeProps => {
+          return (
+            <Survey
+              user={user}
+              match={routeProps.match}
+              location={routeProps.location}
+              history={routeProps.history}
+            />
+          );
+        }}
+      />
+      <Route
+        exact
+        path="/app/charts"
+        render={routeProps => {
+          return (
+            <Charts
+              user={user}
+              match={routeProps.match}
+              location={routeProps.location}
+              history={routeProps.history}
+            />
+          );
+        }}
       />
     </div>
   );
 }
 
-export function SignIn(props) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function Survey(props) {
+  const [radioValue, setRadioValue] = useState(3);
+  const [sleep, setSleep] = useState(8);
+  const [temp, setTemp] = useState(70);
+  const [lat, setLat] = useState(44);
+  const [long, setLong] = useState(-111);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(u => {
-      if (u) {
-        props.history.push("/app");
-      }
-      // do something
+    navigator.geolocation.getCurrentPosition(position => {
+      const lat = position.coords.latitude;
+      const long = position.coords.longitude;
+      setLat(lat);
+      setLong(long);
+    });
+  }, []);
+
+  useEffect(() => {
+    var req = unirest(
+      "GET",
+      `https://community-open-weather-map.p.rapidapi.com/weather?lat=${lat}&lon=${long}&units=imperial`
+    );
+
+    req.headers({
+      "x-rapidapi-host": "community-open-weather-map.p.rapidapi.com",
+      "x-rapidapi-key": "d2b10d0028msh4ba1c30feded6fap1dc0e2jsna8683caf97aa"
     });
 
-    return unsubscribe;
-  }, [props.history]);
+    req.end(function(result) {
+      if (result.error) throw new Error(result.error);
+      setTemp(result.body.main.temp);
+    });
+    return;
+  }, [lat, long]);
 
-  const handleSignIn = () => {
-    auth
-      .signInWithEmailAndPassword(email, password)
-      .then(() => {})
-      .catch(error => {
-        alert(error.message);
+  const handleSave = () => {
+    let today = new Date();
+    today = moment(today).format("YYYY-MM-DD HH:mm");
+    db.collection("users")
+      .doc(props.user.uid)
+      .collection("surveys")
+      .add({ temp: temp, hapiness: radioValue, sleep: sleep, date: today })
+      .then(() => {
+        props.history.push("/app/charts/");
       });
   };
 
   return (
-    <div>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography color="inherit" variant="h6">
-            Sign In
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <div style={{ display: "flex", justifyContent: "center" }}>
-        <Paper
-          style={{
-            width: "480px",
-            marginTop: "50px",
-            padding: "30px"
+    <div style={{ display: "flex", justifyContent: "center" }}>
+      <Paper style={{ padding: 30, width: 400, marginTop: 30 }}>
+        <Typography>How many hours did you sleep last night?</Typography>
+        <TextField
+          fullWidth
+          value={sleep}
+          onChange={e => {
+            setSleep(e.target.value);
           }}
+        />
+        <Typography style={{ marginTop: 20 }}>
+          How happy do you feel today?
+        </Typography>
+        <div>
+          <Radio
+            icon={<VeryDissatisfiedIcon />}
+            checkedIcon={<VeryDissatisfiedIcon />}
+            checked={radioValue === 1}
+            onChange={() => {
+              setRadioValue(1);
+            }}
+          />
+          <Radio
+            icon={<DissatisfiedIcon />}
+            checkedIcon={<DissatisfiedIcon />}
+            checked={radioValue === 2}
+            onChange={() => {
+              setRadioValue(2);
+            }}
+          />
+          <Radio
+            icon={<SatisfiedIcon />}
+            checkedIcon={<SatisfiedIcon />}
+            checked={radioValue === 3}
+            onChange={() => {
+              setRadioValue(3);
+            }}
+          />
+          <Radio
+            icon={<VerySatisfiedIcon />}
+            checkedIcon={<VerySatisfiedIcon />}
+            checked={radioValue === 4}
+            onChange={() => {
+              setRadioValue(4);
+            }}
+          />
+        </div>
+        <Button
+          variant="contained"
+          color="primary"
+          style={{ marginTop: 20 }}
+          onClick={handleSave}
         >
-          <TextField
-            placeholder={"Email"}
-            fullWidth={true}
-            value={email}
-            onChange={e => {
-              setEmail(e.target.value);
-            }}
-          />
-          <TextField
-            placeholder={"Password"}
-            fullWidth={true}
-            style={{ marginTop: "30px" }}
-            value={password}
-            onChange={e => {
-              setPassword(e.target.value);
-            }}
-          />
-          <div
-            style={{
-              marginTop: "30px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center"
-            }}
-          >
-            <Typography>
-              Don't have an account? <Link to="/signup">Sign Up!</Link>
-            </Typography>
-            <Button color="primary" variant="contained" onClick={handleSignIn}>
-              Sign In
-            </Button>
-          </div>
-        </Paper>
-      </div>
+          Save
+        </Button>
+      </Paper>
     </div>
   );
 }
 
-export function SignUp(props) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+function Charts(props) {
+  const [temp, setTemp] = useState([]);
+  const [hapiness, setHapiness] = useState([]);
+  const [sleep, setSleep] = useState([]);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(u => {
-      if (u) {
-        props.history.push("/app");
-      }
-      // do something
-    });
+    const unsubscribe = db
+      .collection("users")
+      .doc(props.user.uid)
+      .collection("surveys")
+      .onSnapshot(snapshot => {
+        const temp_array = [];
+        const hapiness_array = [];
+        const sleep_array = [];
 
-    return unsubscribe;
-  }, [props.history]);
-
-  const handleSignUp = () => {
-    auth
-      .createUserWithEmailAndPassword(email, password)
-      .then(() => {})
-      .catch(error => {
-        alert(error.message);
+        snapshot.forEach(s => {
+          const data = s.data();
+          temp_array.push({ x: data.date, y: data.temp });
+          hapiness_array.push({ x: data.date, y: data.hapiness });
+          sleep_array.push({ x: data.date, y: data.sleep });
+        });
+        setTemp(temp_array);
+        setHapiness(hapiness_array);
+        setSleep(sleep_array);
       });
+    return unsubscribe;
+  }, [props.user]);
+
+  const data = {
+    datasets: [
+      {
+        label: "Tempurature",
+        data: temp,
+        borderColor: ["green"],
+        yAxisID: "A"
+      },
+      {
+        label: "Sleep",
+        data: sleep,
+        borderColor: ["blue"],
+        yAxisID: "B"
+      },
+      {
+        label: "Hapiness",
+        data: hapiness,
+        borderColor: ["red"]
+      }
+    ]
+  };
+  const options = {
+    scales: {
+      yAxes: [{ id: "A", position: "left" }, { id: "B", position: "right" }],
+      xAxes: [{ type: "time", time: { displayFormats: { hour: "MMM D" } } }]
+    }
   };
 
   return (
-    <div>
-      <AppBar position="static" color="primary">
-        <Toolbar>
-          <Typography variant="h6" color="inherit">
-            Sign Up
-          </Typography>
-        </Toolbar>
-      </AppBar>
-      <div style={{ display: "flex", justifyContent: "center" }}>
-        <Paper style={{ width: "480px", marginTop: "50px", padding: "30px" }}>
-          <TextField
-            placeholder={"Email"}
-            fullWidth={true}
-            value={email}
-            onChange={e => {
-              setEmail(e.target.value);
-            }}
-          />
-          <TextField
-            type={"password"}
-            placeholder="Password"
-            fullWidth={true}
-            style={{ marginTop: "30px" }}
-            value={password}
-            onChange={e => {
-              setPassword(e.target.value);
-            }}
-          />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginTop: "30px"
-            }}
-          >
-            <Typography>
-              Already have an account? <Link to="/">Sign in!</Link>
-            </Typography>
-            <Button color="primary" variant="contained" onClick={handleSignUp}>
-              Sign up
-            </Button>
-          </div>
-        </Paper>
-      </div>
+    <div style={{ display: "flex", justifyContent: "center" }}>
+      <Paper style={{ width: 600, marginTop: 30, padding: 30 }}>
+        <Typography variant="H6" style={{ marginBottom: 30 }}>
+          Health Stats over Time
+        </Typography>
+        <Line data={data} options={options} />
+      </Paper>
     </div>
   );
 }

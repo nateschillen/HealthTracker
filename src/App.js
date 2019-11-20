@@ -155,17 +155,23 @@ function Survey(props) {
   useEffect(() => {
     var req = unirest(
       "GET",
-      `https://community-open-weather-map.p.rapidapi.com/weather?lat=${lat}&lon=${long}&units=imperial`
+      "https://community-open-weather-map.p.rapidapi.com/weather"
     );
+
+    req.query({
+      lat: lat,
+      lon: long,
+      units: "imperial"
+    });
 
     req.headers({
       "x-rapidapi-host": "community-open-weather-map.p.rapidapi.com",
-      "x-rapidapi-key": "d2b10d0028msh4ba1c30feded6fap1dc0e2jsna8683caf97aa"
+      "x-rapidapi-key": "2ab76a46c3msh95a7e9a72dc4326p1f1d13jsna9d018bfce1d"
     });
 
-    req.end(function(result) {
-      if (result.error) throw new Error(result.error);
-      setTemp(result.body.main.temp);
+    req.end(function(res) {
+      if (res.error) throw new Error(res.error);
+      setTemp(res.body.main.temp);
     });
     return;
   }, [lat, long]);
@@ -243,6 +249,10 @@ function Survey(props) {
   );
 }
 
+function comp(a, b) {
+  return new Date(a.x).getTime() - new Date(b.x).getTime();
+}
+
 function Charts(props) {
   const [temp, setTemp] = useState([]);
   const [hapiness, setHapiness] = useState([]);
@@ -260,10 +270,17 @@ function Charts(props) {
 
         snapshot.forEach(s => {
           const data = s.data();
+          console.log(data);
           temp_array.push({ x: data.date, y: data.temp });
           hapiness_array.push({ x: data.date, y: data.hapiness });
-          sleep_array.push({ x: data.date, y: data.sleep });
+          sleep_array.push({ x: data.date, y: parseInt(data.sleep, 10) });
         });
+        temp_array.sort(comp);
+        hapiness_array.sort(comp);
+        sleep_array.sort(comp);
+
+        console.log(sleep_array);
+
         setTemp(temp_array);
         setHapiness(hapiness_array);
         setSleep(sleep_array);
@@ -276,19 +293,20 @@ function Charts(props) {
       {
         label: "Tempurature",
         data: temp,
-        borderColor: ["green"],
+        borderColor: "green",
         yAxisID: "A"
       },
       {
         label: "Sleep",
         data: sleep,
-        borderColor: ["blue"],
+        borderColor: "blue",
         yAxisID: "B"
       },
       {
         label: "Hapiness",
         data: hapiness,
-        borderColor: ["red"]
+        borderColor: "red",
+        yAxisID: "B"
       }
     ]
   };
